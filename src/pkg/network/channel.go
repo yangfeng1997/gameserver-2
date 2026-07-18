@@ -101,7 +101,7 @@ func (c *Channel) SetCloseCallback(cb func()) { c.closeCb = cb }
 // SetErrorCallback 设置错误就绪回调。
 func (c *Channel) SetErrorCallback(cb func()) { c.errorCb = cb }
 
-// HandleEvent 按 revents 分发到对应回调。由 EventLoop 在 Poll 后调用。
+// HandleEvent 按 revents 分发到对应回调。由 EventLoop 在 Poll 收集 active 后第二遍调用。
 //
 // 处理顺序遵循 muduo：
 //   - EPOLLHUP 且非可写 → 对端关闭，触发 closeCb；

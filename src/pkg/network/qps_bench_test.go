@@ -99,8 +99,14 @@ func benchClientQPS(b *testing.B, port, conns int, dur time.Duration) float64 {
 
 // startOurEcho 启动本库 dumb-echo 服务（loops 个 sub loop），返回停止函数。
 func startOurEcho(b *testing.B, loops, port int) func() {
+	return startOurEchoOpts(b, loops, port)
+}
+
+// startOurEchoOpts 启动本库 dumb-echo，带额外选项（用于压测不同 buffer 配置）。
+func startOurEchoOpts(b *testing.B, loops, port int, opts ...network.Option) func() {
 	b.Helper()
-	srv, err := network.NewServer(network.WithNumEventLoop(loops))
+	base := []network.Option{network.WithNumEventLoop(loops)}
+	srv, err := network.NewServer(append(base, opts...)...)
 	if err != nil {
 		b.Fatal(err)
 	}

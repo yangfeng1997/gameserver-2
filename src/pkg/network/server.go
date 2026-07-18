@@ -21,6 +21,7 @@ type Server struct {
 	conns     sync.Map // string → *Conn
 	nextID    atomic.Uint64
 	started   atomic.Bool
+	stopping  bool // 关停中：拒绝新 acceptor 创建与新监听启动
 
 	onConnect       ConnCallback
 	onMessage       MessageCallback
@@ -136,6 +137,11 @@ func (s *Server) Run() {
 // createAcceptor 在指定 loop 上创建监听并启用 accept（投递到该 loop，epoll_ctl 在属主线程）。
 func (s *Server) createAcceptor(loop *EventLoop, sp listenSpec) {
 	loop.RunInLoop(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.stopping {
+			return
+		}
 		acc, err := NewAcceptor(loop, sp.network, sp.address, s.opts)
 		if err != nil {
 			s.logger.Fatalf("server: create acceptor %s://%s: %v", sp.network, sp.address, err)
@@ -144,9 +150,7 @@ func (s *Server) createAcceptor(loop *EventLoop, sp listenSpec) {
 			s.newConnection(fd, local, peer)
 		})
 		acc.Listen()
-		s.mu.Lock()
 		s.acceptors = append(s.acceptors, acc)
-		s.mu.Unlock()
 	})
 }
 
@@ -173,19 +177,41 @@ func (s *Server) removeConnection(c *Conn) {
 	}
 }
 
-// Stop 停止 acceptor、关闭所有连接、退出 mainLoop 与 subLoop。
+// StopAccepting 停止所有监听（关闭 listen fd、UDS 删文件），不再接受新连接，
+// 但**不动现有连接**——它们继续在各自 subLoop 上收发，直至对端关闭或显式 Close。
+//
+// 优雅停机范式（业务编排，库只提供原语）：
+//
+//	srv.StopAccepting()                       // 1. 停入口，留现有 conn
+//	sessionMgr.Each(func(s){ s.Conn.AsyncSend(kickPacket) }) // 2. 可选：通知客户端
+//	// 3. 等排空或超时（OnClose→SessionMgr.Remove→计数；或 srv.CountConnections()==0）
+//	for sessionMgr.Count() > 0 && !timeExpired { time.Sleep(50*time.Millisecond) }
+//	srv.Stop()                               // 4. ForceClose 残留 + quit loops
+//
+// drain 判据（在飞 RPC/登录中/对局中）与 kick 包内容属业务/协议范畴，库不可见，
+// 故 graceful 全流程在业务层；此方法只暴露"停 accept 不杀 conn"这一传输原语。
+// 返回时所有已登记 acceptor 都已在各自所属 loop 上同步停止。
+// 幂等，可在 Run 后任意时刻调用。
+func (s *Server) StopAccepting() {
+	s.mu.Lock()
+	s.stopping = true
+	accs := s.acceptors
+	s.acceptors = nil
+	s.mu.Unlock()
+	// 在各 acceptor 所属 loop 上同步停止监听并关闭 fd（epoll_ctl 在属主线程）。
+	for _, acc := range accs {
+		acc.loop.runInLoopSync(acc.Stop)
+	}
+}
+
+// Stop 停止 acceptor、强制关闭所有连接、退出 mainLoop 与 subLoop。
+// 硬停（无 drain、无超时）：先停 accept、再 ForceClose 全部 conn、最后退出 loop。
+// 优雅停机请先 StopAccepting + 业务排空后再 Stop；此方法幂等。
 func (s *Server) Stop() {
 	if !s.started.CompareAndSwap(true, false) {
 		return
 	}
-	s.mu.Lock()
-	accs := s.acceptors
-	s.acceptors = nil
-	s.mu.Unlock()
-	// 在各 acceptor 所属 loop 上停止监听并关闭 fd。
-	for _, acc := range accs {
-		acc.loop.RunInLoop(acc.Stop)
-	}
+	s.StopAccepting()
 	// 强制关闭所有连接。
 	s.conns.Range(func(_, v any) bool {
 		v.(*Conn).ForceClose()

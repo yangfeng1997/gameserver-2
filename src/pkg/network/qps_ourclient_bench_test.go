@@ -245,7 +245,143 @@ func BenchmarkOCPipe_Muduo(b *testing.B) {
 	fmt.Printf("our-cli→muduo  pipe L8 C1024 p64  qps=%12.0f\n", qps)
 }
 
-// --- burst 极限（network.Client 每 cycle 64 次 AsyncSend(4B)，验证 eventfd 合并唤醒 + 零闭包）---
+// --- pipeline 矩阵（network.Client 负载，loops 1/4/8/16）---
+
+func BenchmarkOCPipe_Our_Matrix(b *testing.B) {
+	for _, cfg := range qpsConfigs {
+		b.Run(fmt.Sprintf("L%d_C%d", cfg.loops, cfg.conns), func(b *testing.B) {
+			qps := benchOurClientPipe(b, startOurEcho, cfg.loops, cfg.conns, 64, qpsDur)
+			b.ReportMetric(qps, "qps")
+			fmt.Printf("our-cli→our    pipe L%d C%-4d p64  qps=%12.0f\n", cfg.loops, cfg.conns, qps)
+		})
+	}
+}
+func BenchmarkOCPipe_Gnet_Matrix(b *testing.B) {
+	for _, cfg := range qpsConfigs {
+		b.Run(fmt.Sprintf("L%d_C%d", cfg.loops, cfg.conns), func(b *testing.B) {
+			qps := benchOurClientPipe(b, startGnetEcho, cfg.loops, cfg.conns, 64, qpsDur)
+			b.ReportMetric(qps, "qps")
+			fmt.Printf("our-cli→gnet   pipe L%d C%-4d p64  qps=%12.0f\n", cfg.loops, cfg.conns, qps)
+		})
+	}
+}
+func BenchmarkOCPipe_Muduo_Matrix(b *testing.B) {
+	if _, err := exec.LookPath(muduoBin); err != nil {
+		b.Skipf("muduo binary not found: %v", err)
+	}
+	for _, cfg := range qpsConfigs {
+		b.Run(fmt.Sprintf("L%d_C%d", cfg.loops, cfg.conns), func(b *testing.B) {
+			qps := benchOurClientPipe(b, startMuduoEcho, cfg.loops, cfg.conns, 64, qpsDur)
+			b.ReportMetric(qps, "qps")
+			fmt.Printf("our-cli→muduo  pipe L%d C%-4d p64  qps=%12.0f\n", cfg.loops, cfg.conns, qps)
+		})
+	}
+}
+
+// --- in-loop 自驱动 pipeline（send/recv 同 loop goroutine，零 marshal 零 sig channel）---
+//
+// 对照 benchOurClientPipe（外部 goroutine AsyncSend + sig channel 同步）：
+// 此版 OnConnect 首发、OnMessage 收满 target 即 in-loop Send 下一批。
+// send/recv 全在 loop 线程，不经 eventfd marshal、不经 channel 唤醒——
+// 镜像 stdlib client 的"同 goroutine 收发"，隔离 marshal+sig 代价。
+
+func benchOurClientPipeInLoop(b *testing.B, start func(b *testing.B, loops, port int) func(), loops, conns, pipe int, dur time.Duration) float64 {
+	b.Helper()
+	port := freePortB(b)
+	stopSrv := start(b, loops, port)
+	defer stopSrv()
+
+	cli := network.NewClient(network.WithNumEventLoop(ourClientLoops))
+	cli.Start()
+	defer cli.Stop()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	wbuf := bytes.Repeat(qpsPayload, pipe) // 共享只读：Send 只读，output.Append 另拷，安全
+	target := int64(len(wbuf))
+
+	type pipeState struct {
+		rcvd   int64
+		primed bool
+	}
+
+	var ops atomic.Int64
+	var measuring atomic.Bool
+	var stop atomic.Bool
+	var ready sync.WaitGroup
+	ready.Add(conns)
+
+	// onConnect 在 loop 线程执行（buildConn 经 target.RunInLoop 投递）。
+	cli.SetOnConnect(func(c *network.Conn) {
+		c.SetContext(&pipeState{}) // per-conn 状态，仅 loop-local 访问
+		c.Send(wbuf)              // in-loop 首发，零 marshal
+	})
+	cli.SetOnMessage(func(c *network.Conn, in *network.Buffer) {
+		st, ok := c.Context().(*pipeState)
+		if !ok {
+			in.RetrieveAll()
+			return
+		}
+		st.rcvd += int64(in.ReadableBytes())
+		in.RetrieveAll()
+		if st.rcvd < target {
+			return
+		}
+		st.rcvd = 0
+		if !st.primed {
+			st.primed = true
+			ready.Done()
+			return
+		}
+		if measuring.Load() {
+			ops.Add(int64(pipe))
+		}
+		if stop.Load() {
+			return
+		}
+		c.Send(wbuf) // in-loop，零 marshal
+	})
+
+	conns2 := make([]*network.Conn, conns)
+	for i := range conns {
+		conns2[i] = dialOurClient(b, cli, addr)
+	}
+	defer func() {
+		for _, c := range conns2 {
+			c.Close()
+		}
+	}()
+
+	ready.Wait()
+	ops.Store(0)
+	measuring.Store(true)
+	for _, c := range conns2 {
+		c.AsyncSend(wbuf)
+	}
+	time.Sleep(dur)
+	measuring.Store(false)
+	stop.Store(true)
+	time.Sleep(200 * time.Millisecond) // 让在飞帧落定，不再计入
+	return float64(ops.Load()) / dur.Seconds()
+}
+
+func BenchmarkOCInLoopPipe_Our_Matrix(b *testing.B) {
+	for _, cfg := range qpsConfigs {
+		b.Run(fmt.Sprintf("L%d_C%d", cfg.loops, cfg.conns), func(b *testing.B) {
+			qps := benchOurClientPipeInLoop(b, startOurEcho, cfg.loops, cfg.conns, 64, qpsDur)
+			b.ReportMetric(qps, "qps")
+			fmt.Printf("inloop→our    pipe L%d C%-4d p64  qps=%12.0f\n", cfg.loops, cfg.conns, qps)
+		})
+	}
+}
+func BenchmarkOCInLoopPipe_Gnet_Matrix(b *testing.B) {
+	for _, cfg := range qpsConfigs {
+		b.Run(fmt.Sprintf("L%d_C%d", cfg.loops, cfg.conns), func(b *testing.B) {
+			qps := benchOurClientPipeInLoop(b, startGnetEcho, cfg.loops, cfg.conns, 64, qpsDur)
+			b.ReportMetric(qps, "qps")
+			fmt.Printf("inloop→gnet   pipe L%d C%-4d p64  qps=%12.0f\n", cfg.loops, cfg.conns, qps)
+		})
+	}
+}
 
 func benchOurClientBurst(b *testing.B, start func(b *testing.B, loops, port int) func(), loops, conns, pipe int, dur time.Duration) float64 {
 	b.Helper()

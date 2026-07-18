@@ -161,6 +161,21 @@ func (el *EventLoop) RunInLoop(fn func()) {
 	el.QueueInLoop(fn)
 }
 
+// runInLoopSync 投递任务并阻塞直到执行完成；若已在 loop 线程则直接执行。
+// 用于控制面停机路径，避免 acceptor.Stop 只入队不落地。
+func (el *EventLoop) runInLoopSync(fn func()) {
+	if el.IsInLoopThread() {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	el.QueueInLoop(func() {
+		fn()
+		close(done)
+	})
+	<-done
+}
+
 // QueueInLoop 总是投递到 loop 下一轮执行（即便当前在 loop 线程也延后到下轮）。
 func (el *EventLoop) QueueInLoop(fn func()) {
 	el.wakeup.Run(fn)
