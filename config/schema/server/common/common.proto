@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+
+option go_package = "project/config/gen/server/common;common";
+
+// CommonConfig 所有服务共享的公共配置。
+message CommonConfig {
+  option (config.root) = true;
+  option (config.common) = true;
+
+  ClusterConfig cluster = 1;
+  EtcdConfig etcd = 2;
+  RedisConfig redis = 3;
+  MongoConfig mongo = 4;
+}
+
+message ClusterConfig {
+  string name = 1 [(config.required) = true];
+  string env = 2 [(config.required) = true];
+  uint32 world_id = 3 [(config.required) = true];
+}
+
+message EtcdConfig {
+  repeated string endpoints = 1 [(config.required) = true];
+}
+
+message RedisConfig {
+  repeated RedisNodeConfig nodes = 1 [(config.required) = true];
+  string password = 2 [(config.required) = true, (config.env) = true, (config.secret) = true];
+}
+
+message RedisNodeConfig {
+  string host = 1 [(config.required) = true];
+  int32 port = 2 [(config.required) = true];
+}
+
+message MongoConfig {
+  string uri = 1 [(config.required) = true, (config.env) = true, (config.secret) = true];
+  string database = 2 [(config.required) = true];
+}

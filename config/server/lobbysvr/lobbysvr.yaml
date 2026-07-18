@@ -1,0 +1,3 @@
+max_player: 5000
+heartbeat_sec: 30
+routeragent_sock_path: "${routeragent_sock_path}"

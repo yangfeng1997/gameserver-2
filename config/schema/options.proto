@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package config;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "project/config/gen/server;configgen";
+
+extend google.protobuf.MessageOptions {
+  // root 标记该 message 为一个根配置，会为其生成一套完整的配置管理代码。
+  bool root = 50001;
+  // common 标记公共配置，所有服务都会引用。
+  bool common = 50002;
+  // server 标记该配置归属的服务名。
+  string server = 50003;
+}
+
+extend google.protobuf.FieldOptions {
+  // reload 标记该字段允许热更。未标记的字段变更会被 CheckReload 拒绝。
+  bool reload = 50005;
+  // required 标记必填，生成 Validate 时做零值检查。
+  bool required = 50006;
+  // env 标记该字段通过环境变量注入。不能与 reload 同时使用。
+  bool env = 50007;
+  // enum_values 限制 string 字段的合法取值（逗号分隔）。
+  string enum_values = 50008;
+  // secret 标记敏感字段，Redact() 时替换为 "***"。不能与 reload 同时使用。
+  bool secret = 50009;
+}

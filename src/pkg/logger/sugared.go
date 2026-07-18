@@ -35,6 +35,23 @@ func Sugar() SugaredLogger {
 	return nopSugared{}
 }
 
+// SugarOf 返回指定 Logger 实例的 SugaredLogger。
+// 与 Sugar()（只取全局）不同，此函数取任意实例——典型用于：
+//
+//	netSugar := logger.SugarOf(logger.L().With(logger.String("component", "network")))
+//	network.WithLogger(netSugar)  // 网络库每条日志自动带 component=network
+//
+// Logger 接口刻意不声明 Sugar()（保持与 Backend 无关），故经类型断言取；
+// adapterLogger（New/NewZapFileLogger/With 返回的具体类型）支持 Sugar()，且
+// 派生（With）logger 的 sugar 继承其绑定字段。若该 Logger 底层不支持 sugar，
+// 返回 nopSugared（不输出），不 panic。
+func SugarOf(l Logger) SugaredLogger {
+	if sp, ok := l.(interface{ Sugar() SugaredLogger }); ok {
+		return sp.Sugar()
+	}
+	return nopSugared{}
+}
+
 // nopSugared 空实现，Sugar() 的兜底返回值。
 type nopSugared struct{}
 

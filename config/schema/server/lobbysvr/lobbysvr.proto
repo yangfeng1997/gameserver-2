@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+
+option go_package = "project/config/gen/server/lobbysvr;lobbysvr";
+
+// LobbysvrConfig 大厅服主配置。
+message LobbysvrConfig {
+  option (config.root) = true;
+  option (config.server) = "lobbysvr";
+
+  int32 max_player = 1 [(config.required) = true];
+  int32 heartbeat_sec = 2 [(config.required) = true, (config.reload) = true];
+  string routeragent_sock_path = 3 [(config.required) = true, (config.env) = true];
+}

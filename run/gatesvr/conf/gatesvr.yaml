@@ -1,0 +1,5 @@
+listen_tcp: "0.0.0.0:5555"
+listen_ws: "0.0.0.0:5556"
+max_conn: 10000
+heartbeat_sec: 30
+routeragent_sock_path: "/tmp/routeragent/ra.sock"

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+import "config/schema/types.proto";
+
+option go_package = "project/config/gen/server/gatesvr;gatesvr";
+
+// GatesvrLogConfig 网关服日志配置（独立于主配置，支持单独热更）。
+message GatesvrLogConfig {
+  option (config.root) = true;
+  option (config.server) = "gatesvr";
+
+  LoggerGroupConfig logger_group = 1 [(config.reload) = true];
+}

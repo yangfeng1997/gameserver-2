@@ -1,0 +1,30 @@
+cluster:
+  name: "gameserver"
+  env: "dev"
+  world_id: 1
+
+etcd:
+  endpoints:
+    - "http://localhost:2379"
+    - "http://localhost:2479"
+    - "http://localhost:2579"
+
+redis:
+  nodes:
+    - host: "localhost"
+      port: 6379
+    - host: "localhost"
+      port: 6380
+    - host: "localhost"
+      port: 6381
+    - host: "localhost"
+      port: 6382
+    - host: "localhost"
+      port: 6383
+    - host: "localhost"
+      port: 6384
+  password: "redisCluster123"
+
+mongo:
+  uri: "mongodb://admin:mongoCluster123@localhost:27017/?authSource=admin"
+  database: "admin"

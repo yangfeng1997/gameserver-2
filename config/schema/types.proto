@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+
+option go_package = "project/config/gen/server;configgen";
+
+// LogConfig 日志文件配置。可在各服务配置中复用。
+message LogConfig {
+  string level = 1 [(config.enum_values) = "debug,info,warn,error,fatal"];
+  string format = 2 [(config.enum_values) = "console,json"];
+  bool stderr_also = 3;
+  string dir = 4 [(config.required) = true, (config.env) = true];
+  string basename = 5 [(config.required) = true];
+  int32 max_size_mb = 6;
+  int32 max_backups = 7;
+  bool rotate_by_hour = 8;
+}
+
+// LoggerGroupConfig 一组三个独立日志流：main / res / tracing。
+// 各服务配置中嵌入此类型即可获得三层日志分离能力。
+message LoggerGroupConfig {
+  LogConfig main    = 1;
+  LogConfig res     = 2;
+  LogConfig tracing = 3;
+}
