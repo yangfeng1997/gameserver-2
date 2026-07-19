@@ -396,7 +396,7 @@ func renderConfigFile(root messageInfo, svr string, allMsgs []messageInfo) strin
 	b.WriteString("\tsnapshot *" + configName + "\n")
 	b.WriteString("}\n\n")
 	b.WriteString("var " + dataVar + " atomic.Pointer[" + configName + "]\n")
-	b.WriteString("var " + reloaderVar + " " + reloaderName + "\n\n")
+	b.WriteString("var " + reloaderVar + " = &" + reloaderName + "{}\n\n")
 
 	// ---- Validate ----
 	renderValidate(&b, root)

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package ragent.proto;
+
+option go_package = "project/src/core/ragent/proto;ragentpb";
+
+message Handshake {
+  uint32 node_id = 1;
+}
+
+message HandshakeAck {
+  bool ok = 1;
+  string message = 2;
+}

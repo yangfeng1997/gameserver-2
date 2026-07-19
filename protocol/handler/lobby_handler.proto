@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package protocol.handler;
+
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/handler;handlerpb";
+
+service LobbyHandler {
+  option (protocol.common.kind) = FRONTEND;
+  option (protocol.common.server_type) = ST_LOBBYSVR;
+
+  rpc Ping(CS_Ping_Req) returns (SC_Pong_Rsp);
+}
+
+message CS_Ping_Req {
+  option (protocol.common.cmd_id) = 2054;
+  option (protocol.common.no_auth) = true;
+
+  string text = 1;
+}
+
+message SC_Pong_Rsp {
+  option (protocol.common.cmd_id) = 2055;
+
+  string text = 1;
+}

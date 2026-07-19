@@ -1,0 +1,81 @@
+package codec
+
+import (
+	"encoding/binary"
+	"fmt"
+)
+
+// PacketType 外层帧类型。
+type PacketType uint8
+
+const (
+	PacketHandshake    PacketType = 0x01
+	PacketHandshakeAck PacketType = 0x02
+	PacketHeartbeat    PacketType = 0x03
+	PacketData         PacketType = 0x04
+	PacketKick         PacketType = 0x05
+)
+
+// Packet 外层帧：type + 3 字节长度 + body。
+// 最大 body 16 MiB（24 位长度字段上限）。
+type Packet struct {
+	Type PacketType
+	Body []byte
+}
+
+// EncodePacket 编码为字节切片。
+func EncodePacket(p Packet) ([]byte, error) {
+	return AppendPacket(nil, p)
+}
+
+// AppendPacket 将 packet 编码追加到 dst。
+func AppendPacket(dst []byte, p Packet) ([]byte, error) {
+	if len(p.Body) > 0xFFFFFF {
+		return nil, fmt.Errorf("packet too large: %d", len(p.Body))
+	}
+	pos := len(dst)
+	need := pos + 4 + len(p.Body)
+	if cap(dst) < need {
+		newCap := cap(dst) * 2
+		if newCap < need {
+			newCap = need
+		}
+		grown := make([]byte, need, newCap)
+		copy(grown, dst)
+		dst = grown
+	} else {
+		dst = dst[:need]
+	}
+	dst[pos] = byte(p.Type)
+	putUint24(dst[pos+1:pos+4], uint32(len(p.Body)))
+	copy(dst[pos+4:], p.Body)
+	return dst, nil
+}
+
+// DecodePacket 解码为 Packet。
+func DecodePacket(data []byte) (Packet, error) {
+	if len(data) < 4 {
+		return Packet{}, fmt.Errorf("packet too short: %d", len(data))
+	}
+	bodyLen := int(readUint24(data[1:4]))
+	if len(data) != 4+bodyLen {
+		return Packet{}, fmt.Errorf("packet length mismatch: want %d got %d", 4+bodyLen, len(data))
+	}
+	return Packet{Type: PacketType(data[0]), Body: data[4:]}, nil
+}
+
+func putUint24(dst []byte, v uint32) {
+	dst[0] = byte(v >> 16)
+	dst[1] = byte(v >> 8)
+	dst[2] = byte(v)
+}
+
+func readUint24(src []byte) uint32 {
+	return uint32(src[0])<<16 | uint32(src[1])<<8 | uint32(src[2])
+}
+
+// PutUint32 写入大端 uint32。
+func PutUint32(dst []byte, v uint32) { binary.BigEndian.PutUint32(dst, v) }
+
+// Uint32 读取大端 uint32。
+func Uint32(src []byte) uint32 { return binary.BigEndian.Uint32(src) }

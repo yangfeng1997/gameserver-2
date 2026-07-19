@@ -28,7 +28,7 @@ type gatesvrConfigReloader struct{
 }
 
 var gatesvrConfigData atomic.Pointer[GatesvrConfig]
-var GatesvrConfigReloader gatesvrConfigReloader
+var GatesvrConfigReloader = &gatesvrConfigReloader{}
 
 // Validate 校验配置必填字段与枚举值。
 func (c *GatesvrConfig) Validate() error {

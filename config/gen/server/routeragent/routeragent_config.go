@@ -91,7 +91,7 @@ type routeragentConfigReloader struct{
 }
 
 var routeragentConfigData atomic.Pointer[RouteragentConfig]
-var RouteragentConfigReloader routeragentConfigReloader
+var RouteragentConfigReloader = &routeragentConfigReloader{}
 
 // Validate 校验配置必填字段与枚举值。
 func (c *RouteragentConfig) Validate() error {

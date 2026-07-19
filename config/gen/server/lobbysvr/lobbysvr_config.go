@@ -26,7 +26,7 @@ type lobbysvrConfigReloader struct{
 }
 
 var lobbysvrConfigData atomic.Pointer[LobbysvrConfig]
-var LobbysvrConfigReloader lobbysvrConfigReloader
+var LobbysvrConfigReloader = &lobbysvrConfigReloader{}
 
 // Validate 校验配置必填字段与枚举值。
 func (c *LobbysvrConfig) Validate() error {

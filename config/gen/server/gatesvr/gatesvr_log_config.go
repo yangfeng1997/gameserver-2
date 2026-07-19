@@ -88,7 +88,7 @@ type gatesvrLogConfigReloader struct{
 }
 
 var gatesvrLogConfigData atomic.Pointer[GatesvrLogConfig]
-var GatesvrLogConfigReloader gatesvrLogConfigReloader
+var GatesvrLogConfigReloader = &gatesvrLogConfigReloader{}
 
 // Validate 校验配置必填字段与枚举值。
 func (c *GatesvrLogConfig) Validate() error {

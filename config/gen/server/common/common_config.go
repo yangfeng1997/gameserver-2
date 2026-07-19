@@ -143,7 +143,7 @@ type commonConfigReloader struct{
 }
 
 var commonConfigData atomic.Pointer[CommonConfig]
-var CommonConfigReloader commonConfigReloader
+var CommonConfigReloader = &commonConfigReloader{}
 
 // Validate 校验配置必填字段与枚举值。
 func (c *CommonConfig) Validate() error {
